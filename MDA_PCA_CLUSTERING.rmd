@@ -1,0 +1,242 @@
+---
+title: "Multivariate_Analysis_Probset"
+authors: Richard Gan 
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+<br>
+
+# ===============================================
+```{r,warning = FALSE,message = FALSE,pkg}
+#install.packages('pacman')
+require(pacman)
+pacman::p_load(stats,RSQLite,tinytex,safetensors,reticulate,odbc,tensorflow,tidyverse,quantmod,psych,pastecs,olsrr,stargazer,ggfortify,caTools,car,MASS,corrplot,performance,flexdashboard,tidymodels,dplyr,ggplot2,tidyr,sparklyr,purrrlyr,GGally,openxlsx,YieldCurve,quantmod,odbc,getPass)
+```
+
+<br>
+
+# ===============================================
+
+$$
+\text{Multiple Discriminant Analysis} \\
+Y_i = X_1 + X_2 + X_3 + \cdots + X_n
+$$
+```{r variable selection, eval = FALSE}
+MTCARS using Discriminant analysis
+contains the column $am which contains binary values [1,0]
+This suggests that we should proceed with:
+(1) One Dependent Variable $am~
+(2) Nonmetric
+(3) Nominal (size of n <> amount of the characteristic being measured.
+```
+
+```{r,LDA}
+data(mtcars)
+
+# In this block, $cyl is used as our DV, which has 3 unique values
+
+# train test
+library(caTools)
+set.seed(0)
+split = sample.split(mtcars$cyl, SplitRatio = 0.7)
+train = subset(mtcars, split == TRUE)
+test = subset(mtcars, split == FALSE)
+
+# LDA 
+library(MASS)
+lda.fit = lda(cyl ~ ., data = train)
+
+# test pred
+predictions = predict(lda.fit, test)
+
+# actual pred
+table(predictions$class, test$cyl)
+
+# accuracy
+mean(predictions$class == test$cyl)
+```
+
+# ===============================================
+
+```{r, LDA1}
+df1<<-as.data.frame(mtcars)
+# Dataset numerical
+# am = categorical//dv
+# problem = classification
+# iv = 10 variables
+# shape = 11x32(colsxrows) 
+# am = automatic or manual
+# Goal = use LDA to discriminate if car is automatic or manual
+
+#EDA
+#colnames(df1)
+#glimpse(df1)
+#summary(df1) 
+#sapply(df1,summary) 
+#df1$am #categorical
+
+# Assign probabilities; Creating prior probabilities basis mpg unique()
+# bayes theorem? - not yet sure although it is commented for future reference/improvements
+num_classes <- length(unique(df1$am))
+prior_probs <- rep(1/num_classes, num_classes)
+
+rep1<-rep(1)
+print(prior_probs)
+
+# LDA Model 
+DAModel.1 <- lda(am ~ cyl + disp + hp + drat + wt + qsec + vs + mpg + gear + carb, data = df1, prior = prior_probs)
+
+# Confusion Matrix
+confusion_matrix <- table(Predicted = predict(DAModel.1, df1)$class, Actual = df1$am)
+print(confusion_matrix)
+
+# Cross valid LDA model
+lda_cv <- lda(am ~ cyl + disp + hp + drat + wt + qsec + vs + mpg + gear + carb, data = df1, prior = prior_probs, CV = TRUE) 
+
+# Cross valid
+lda_cv$class 
+lda_cv$posterior
+print(lda_cv)
+
+
+```
+
+
+# ===============================================
+
+```{r, LDA2}
+data(mtcars)
+#converted $am 0 and 1 to factor
+# am conversion
+mtcars$am <- factor(mtcars$am, labels = c("Automatic", "Manual"))
+print(mtcars$am)
+
+# Fit LDA
+mtcars_lda <- lda(am ~ ., data = mtcars)
+
+print(mtcars_lda)
+
+```
+
+# ===============================================
+
+```{r, LDA3}
+data(mtcars)
+#similar to LDA1 but we use $am (binary) as the DV
+
+#  split 
+library(caTools)
+set.seed(0)
+split = sample.split(mtcars$am, SplitRatio = 0.7)
+train = subset(mtcars, split == TRUE)
+test = subset(mtcars, split == FALSE)
+
+# fit
+library(MASS)
+lda.fit = lda(am ~ ., data = train)
+
+# test 
+predictions = predict(lda.fit, test)
+
+# actual
+table(predictions$class, test$am)
+
+# accuracy
+mean(predictions$class == test$am)
+```
+
+
+<br>
+
+
+$$
+\text{Principal Component Analysis} \\
+\operatorname{cov}(X, Y) = \frac{1}{n} \sum_{i=1}^{n} (x_i - \bar{x})(y_i - \bar{y})
+$$
+
+# ===============================================
+
+```{r,PCA}
+df2<<-as.data.frame(iris)
+
+# EDA
+colnames(df2)
+glimpse(df2)
+summary(df2) 
+
+#center = argument ensures that the data is centered (mean is subtracted from each column)
+#scale. = scales the data (each column is divided by its standard deviation)
+
+iris_pca <- prcomp(df2[, 1:4], center = TRUE, scale = TRUE)
+
+#the first component captures roughly 72% of the data and the second is 22% for the second, and so on. Derived from summary() proportion of variance
+summary(iris_pca)
+plot(iris_pca)
+biplot(iris_pca)
+# biplot .75 scaling
+biplot(iris_pca, scale =0.75)
+```
+
+
+
+<br>
+
+
+# ===============================================
+
+$$
+\text{K-means} \\
+J = \sum_{j=1}^{k} \sum_{i=1}^{n} \left\lVert x_i^{(j)} - c_j \right\rVert^2
+$$
+
+
+```{r Elbow}
+data(mtcars)
+mtcars_scaled <- scale(mtcars[, -c(1)])
+dist_mtcars <- dist(mtcars_scaled)
+set.seed(0)
+wss <- sapply(1:10, function(k) {
+    kmeans(mtcars_scaled, k, nstart = 10)$tot.withinss
+})
+
+# Plot the elbow graph
+plot(1:10, wss, type = "b", xlab = "Number of Clusters",
+     ylab = "Within-cluster Sum of Squares")
+
+print('The elbow method is a graphical method for finding the optimal K value in a k-means clustering algorithm. The elbow graph shows the within-cluster-sum-of-square (WCSS) values on the y-axis corresponding to the different values of K (on the x-axis). The optimal K value is the point at which the graph forms an elbow')
+
+```
+
+# ===============================================
+
+```{r Dendogram, Agglomerative, and Hierarchical Clustering (AHC)}
+data(mtcars)
+clustering <- scale(mtcars[, -c(1, 9)]) # Exclude col 1 (row names) and 9 (am)
+dist_mtcars <- dist(mtcars_scaled)
+
+# Hierarchical clustering one can stop at any number of clusters, one find appropriate by interpreting the dendrogram
+# Ward's method (minimizing the sum of squares)
+hc_mtcars <- hclust(dist_mtcars, method = "ward.D2")
+
+# Plot the Dendrogram
+plot(hc_mtcars, cex = 0.6, hang = -1)
+rect.hclust(hc_mtcars, k = 3, border = "red")
+
+# Agglomerative methods begin with 'n' clusters and sequentially combine similar clusters until only one cluster is obtained
+
+set.seed(0)
+km_mtcars <- kmeans(clustering, centers = 3)
+print(km_mtcars$cluster)
+
+# Plot
+library(cluster)
+clusplot(clustering, km_mtcars$cluster, color = TRUE, shade = TRUE,
+         labels = 2, lines = 0)
+
+
+```
+
+
